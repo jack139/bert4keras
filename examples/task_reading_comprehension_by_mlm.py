@@ -28,8 +28,8 @@ checkpoint_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_model.ckpt'
 dict_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/vocab.txt'
 
 # 标注数据
-webqa_data = json.load(open('/root/qa_datasets/WebQA.json'))
-sogou_data = json.load(open('/root/qa_datasets/SogouQA.json'))
+webqa_data = json.load(open('datasets/qa/WebQA.json'))
+sogou_data = json.load(open('datasets/qa/SogouQA.json'))
 
 # 保存一个随机序（供划分valid用）
 if not os.path.exists('../random_order.json'):
