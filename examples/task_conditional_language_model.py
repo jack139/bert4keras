@@ -25,9 +25,9 @@ num_classes = 2
 epochs = 20
 
 # bert配置
-config_path = '/root/kg/bert/chinese_L-12_H-768_A-12/bert_config.json'
-checkpoint_path = '/root/kg/bert/chinese_L-12_H-768_A-12/bert_model.ckpt'
-dict_path = '/root/kg/bert/chinese_L-12_H-768_A-12/vocab.txt'
+config_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_config.json'
+checkpoint_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_model.ckpt'
+dict_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/vocab.txt'
 
 # 加载并精简词表，建立分词器
 token_dict, keep_tokens = load_vocab(

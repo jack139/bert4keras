@@ -24,9 +24,9 @@ batch_size = 32
 epochs = 100
 
 # bert配置
-config_path = '/root/kg/bert/chinese_L-12_H-768_A-12/bert_config.json'
-checkpoint_path = '/root/kg/bert/chinese_L-12_H-768_A-12/bert_model.ckpt'
-dict_path = '/root/kg/bert/chinese_L-12_H-768_A-12/vocab.txt'
+config_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_config.json'
+checkpoint_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_model.ckpt'
+dict_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/vocab.txt'
 
 # 标注数据
 webqa_data = json.load(open('/root/qa_datasets/WebQA.json'))

@@ -15,9 +15,9 @@ set_gelu('tanh')  # 切换gelu版本
 num_classes = 2
 maxlen = 128
 batch_size = 32
-config_path = '/root/kg/bert/albert_small_zh_google/albert_config.json'
-checkpoint_path = '/root/kg/bert/albert_small_zh_google/albert_model.ckpt'
-dict_path = '/root/kg/bert/albert_small_zh_google/vocab.txt'
+config_path = '../../nlp_model/albert_zh_base/albert_config.json'
+checkpoint_path = '../../nlp_model/albert_zh_base/model.ckpt-best'
+dict_path = '../../nlp_model/albert_zh_base/vocab_chinese.txt'
 
 
 def load_data(filename):

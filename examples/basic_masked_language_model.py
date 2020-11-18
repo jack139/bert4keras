@@ -6,9 +6,9 @@ from bert4keras.tokenizers import Tokenizer
 from bert4keras.snippets import to_array
 import numpy as np
 
-config_path = '/root/kg/bert/chinese_L-12_H-768_A-12/bert_config.json'
-checkpoint_path = '/root/kg/bert/chinese_L-12_H-768_A-12/bert_model.ckpt'
-dict_path = '/root/kg/bert/chinese_L-12_H-768_A-12/vocab.txt'
+config_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_config.json'
+checkpoint_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/bert_model.ckpt'
+dict_path = '../../nlp_model/chinese_bert_L-12_H-768_A-12/vocab.txt'
 
 tokenizer = Tokenizer(dict_path, do_lower_case=True)  # 建立分词器
 model = build_transformer_model(

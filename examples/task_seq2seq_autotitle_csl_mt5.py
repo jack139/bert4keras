@@ -27,10 +27,10 @@ batch_size = 16
 epochs = 40
 
 # 模型路径
-config_path = '/root/kg/bert/mt5/mt5_base/mt5_base_config.json'
-checkpoint_path = '/root/kg/bert/mt5/mt5_base/model.ckpt-1000000'
-spm_path = '/root/kg/bert/mt5/sentencepiece_cn.model'
-keep_tokens_path = '/root/kg/bert/mt5/sentencepiece_cn_keep_tokens.json'
+config_path = '../../nlp_model/mt5_base/mt5_base_config.json'
+checkpoint_path = '../../nlp_model/mt5_base/model.ckpt-1000000'
+spm_path = '../../nlp_model/mt5_base/sentencepiece_cn.model'
+keep_tokens_path = '../../nlp_model/mt5_base/sentencepiece_cn_keep_tokens.json'
 
 
 def load_data(filename):
@@ -46,9 +46,9 @@ def load_data(filename):
 
 
 # 加载数据集
-train_data = load_data('/root/csl/train.tsv')
-valid_data = load_data('/root/csl/val.tsv')
-test_data = load_data('/root/csl/test.tsv')
+train_data = load_data('datasets/csl/train.tsv')
+valid_data = load_data('datasets/csl/val.tsv')
+test_data = load_data('datasets/csl/test.tsv')
 
 # 加载分词器
 tokenizer = SpTokenizer(spm_path, token_start=None, token_end='</s>')
