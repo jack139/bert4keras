@@ -5,15 +5,22 @@
 # 数据集：https://github.com/CLUEbenchmark/CLGE 中的CSL数据集
 # 补充了评测指标bleu、rouge-1、rouge-2、rouge-l
 
-from __future__ import print_function
+import os
+# 启用AMP, Volta以下显卡，需要设置环境变量 TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE=1
+# 原因来自：https://devtalk.nvidia.com/default/topic/1052688/container-tensorflow/
+#               issue-about-no-suitable-gpus-detected-when-using-mixed-precision-graph-optimizer/
+os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE'] = '1'
+# 使用 tf.keras
+os.environ['TF_KERAS'] = '1'
+
 import json
 import numpy as np
 from tqdm import tqdm
-from bert4keras.backend import keras, K
+from bert4keras.backend import keras, K, tf
 from bert4keras.layers import Loss
 from bert4keras.models import build_transformer_model
 from bert4keras.tokenizers import SpTokenizer
-from bert4keras.optimizers import Adam
+#from bert4keras.optimizers import Adam
 from bert4keras.snippets import sequence_padding, open
 from bert4keras.snippets import DataGenerator, AutoRegressiveDecoder
 from keras.models import Model
@@ -27,10 +34,10 @@ batch_size = 16
 epochs = 40
 
 # 模型路径
-config_path = '../../nlp_model/mt5_base/mt5_base_config.json'
-checkpoint_path = '../../nlp_model/mt5_base/model.ckpt-1000000'
-spm_path = '../../nlp_model/mt5_base/sentencepiece_cn.model'
-keep_tokens_path = '../../nlp_model/mt5_base/sentencepiece_cn_keep_tokens.json'
+config_path = '../../nlp_model/mt5_small/mt5_small_config.json'
+checkpoint_path = '../../nlp_model/mt5_small/model.ckpt-1000000'
+spm_path = '../../nlp_model/mt5_small/sentencepiece_cn.model'
+keep_tokens_path = '../../nlp_model/mt5_small/sentencepiece_cn_keep_tokens.json'
 
 
 def load_data(filename):
@@ -102,7 +109,10 @@ model.summary()
 output = CrossEntropy(1)([model.inputs[1], model.outputs[0]])
 
 model = Model(model.inputs, output)
-model.compile(optimizer=Adam(2e-4))
+# 启用 AMP, 要使用tf.keras的优化器，不能使用自定义的
+opt = tf.keras.optimizers.Adam(2e-4)
+opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+model.compile(optimizer=opt)
 
 
 class AutoTitle(AutoRegressiveDecoder):
