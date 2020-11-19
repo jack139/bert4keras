@@ -10,7 +10,8 @@ import os
 # 原因来自：https://devtalk.nvidia.com/default/topic/1052688/container-tensorflow/
 #               issue-about-no-suitable-gpus-detected-when-using-mixed-precision-graph-optimizer/
 #os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE'] = '1'
-# 使用 tf.keras
+
+# 使用 tf.keras, AMP需要使用 tf.keras的优化器
 os.environ['TF_KERAS'] = '1'
 
 import json
@@ -20,7 +21,7 @@ from bert4keras.backend import keras, K, tf
 from bert4keras.layers import Loss
 from bert4keras.models import build_transformer_model
 from bert4keras.tokenizers import SpTokenizer
-#from bert4keras.optimizers import Adam
+from bert4keras.optimizers import Adam
 from bert4keras.snippets import sequence_padding, open
 from bert4keras.snippets import DataGenerator, AutoRegressiveDecoder
 from keras.models import Model
@@ -109,8 +110,8 @@ model.summary()
 output = CrossEntropy(1)([model.inputs[1], model.outputs[0]])
 
 model = Model(model.inputs, output)
+opt = Adam(2e-4)
 # 启用 AMP, 要使用tf.keras的优化器，不能使用自定义的
-opt = tf.keras.optimizers.Adam(2e-4)
 opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 model.compile(optimizer=opt)
 
