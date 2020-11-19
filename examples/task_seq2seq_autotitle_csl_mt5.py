@@ -9,7 +9,7 @@ import os
 # 启用AMP, Volta以下显卡，需要设置环境变量 TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE=1
 # 原因来自：https://devtalk.nvidia.com/default/topic/1052688/container-tensorflow/
 #               issue-about-no-suitable-gpus-detected-when-using-mixed-precision-graph-optimizer/
-os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE'] = '1'
+#os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE'] = '1'
 # 使用 tf.keras
 os.environ['TF_KERAS'] = '1'
 
