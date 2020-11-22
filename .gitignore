@@ -122,3 +122,5 @@ dmypy.json
 *outputs/
 *.pb
 *.model
+checkpoint
+*.weights.*
