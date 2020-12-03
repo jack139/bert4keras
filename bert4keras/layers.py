@@ -127,6 +127,33 @@ class BiasAdd(Layer):
         return K.bias_add(inputs, self.bias)
 
 
+class Concatenate1D(Layer):
+    """1维序列拼接层
+    说明：本来该功能可以直接通过Concatenate层来实现，无奈Keras
+          自带的Concatenate层的compute_mask写得不合理，导致一个
+          带mask的序列与一个不带mask的序列拼接会报错，因此干脆
+          自己重写一个好了。
+    """
+    def call(self, inputs):
+        return K.concatenate(inputs, axis=1)
+
+    def compute_mask(self, inputs, mask=None):
+        if mask is not None:
+            masks = []
+            for i, m in enumerate(mask):
+                if m is None:
+                    m = K.ones_like(inputs[i][..., 0], dtype='bool')
+                masks.append(m)
+            return K.concatenate(masks, axis=1)
+
+    def compute_output_shape(self, input_shape):
+        if all([shape[1] for shape in input_shape]):
+            seq_len = sum([shape[1] for shape in input_shape])
+            return (input_shape[0][0], seq_len, input_shape[0][2])
+        else:
+            return (input_shape[0][0], None, input_shape[0][2])
+
+
 class MultiHeadAttention(Layer):
     """多头注意力机制
     """
@@ -183,10 +210,11 @@ class MultiHeadAttention(Layer):
         """
         q, k, v = inputs[:3]
         q_mask, v_mask = None, None
-        if mask[0] is not None:
-            q_mask = K.cast(mask[0], K.floatx())
-        if mask[2] is not None:
-            v_mask = K.cast(mask[2], K.floatx())
+        if mask is not None:
+            if mask[0] is not None:
+                q_mask = K.cast(mask[0], K.floatx())
+            if mask[2] is not None:
+                v_mask = K.cast(mask[2], K.floatx())
         # 线性变换
         qw = self.q_dense(q)
         kw = self.k_dense(k)
@@ -292,7 +320,8 @@ class LayerNormalization(Layer):
 
     def compute_mask(self, inputs, mask=None):
         if self.conditional:
-            masks = [K.expand_dims(m, 0) for m in mask if m is not None]
+            masks = mask if mask is not None else []
+            masks = [m[None] for m in masks if m is not None]
             if len(masks) == 0:
                 return None
             else:
@@ -392,7 +421,7 @@ class LayerNormalization(Layer):
 
 
 class PositionEmbedding(Layer):
-    """定义位置Embedding，这里的Embedding是可训练的。
+    """定义可训练的位置Embedding
     """
     def __init__(
         self,
@@ -431,11 +460,13 @@ class PositionEmbedding(Layer):
             batch_size, seq_len = input_shape[0], input_shape[1]
             pos_embeddings = self.embeddings[:seq_len]
             pos_embeddings = K.expand_dims(pos_embeddings, 0)
-            if self.merge_mode != 'add':
+            if self.merge_mode not in ['add', 'mul']:
                 pos_embeddings = K.tile(pos_embeddings, [batch_size, 1, 1])
 
         if self.merge_mode == 'add':
             return inputs + pos_embeddings
+        elif self.merge_mode == 'mul':
+            return inputs * pos_embeddings
         else:
             return K.concatenate([inputs, pos_embeddings])
 
@@ -443,7 +474,7 @@ class PositionEmbedding(Layer):
         if self.custom_position_ids:
             input_shape = input_shape[0]
 
-        if self.merge_mode == 'add':
+        if self.merge_mode in ['add', 'mul']:
             return input_shape
         else:
             return input_shape[:2] + (input_shape[2] + self.output_dim,)
@@ -458,6 +489,67 @@ class PositionEmbedding(Layer):
             'custom_position_ids': self.custom_position_ids,
         }
         base_config = super(PositionEmbedding, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+class SinusoidalPositionEmbedding(Layer):
+    """定义Sin-Cos位置Embedding
+    """
+    def __init__(
+        self, output_dim, merge_mode='add', custom_position_ids=False, **kwargs
+    ):
+        super(SinusoidalPositionEmbedding, self).__init__(**kwargs)
+        self.output_dim = output_dim
+        self.merge_mode = merge_mode
+        self.custom_position_ids = custom_position_ids
+
+    def call(self, inputs):
+        """如果custom_position_ids，那么第二个输入为自定义的位置id
+        """
+        input_shape = K.shape(inputs)
+        batch_size, seq_len = input_shape[0], input_shape[1]
+
+        if self.custom_position_ids:
+            inputs, position_ids = inputs
+        else:
+            position_ids = K.arange(0, seq_len, dtype=K.floatx())[None]
+
+        indices = K.arange(0, self.output_dim // 2, dtype=K.floatx())
+        indices = K.pow(10000.0, -2 * indices / self.output_dim)
+        pos_embeddings = tf.einsum('bn,d->bnd', position_ids, indices)
+        pos_embeddings = K.concatenate([
+            K.sin(pos_embeddings)[..., None],
+            K.cos(pos_embeddings)[..., None]
+        ])
+        pos_embeddings = K.reshape(
+            pos_embeddings, (-1, seq_len, self.output_dim)
+        )
+
+        if self.merge_mode == 'add':
+            return inputs + pos_embeddings
+        elif self.merge_mode == 'mul':
+            return inputs * pos_embeddings
+        else:
+            if not self.custom_position_ids:
+                pos_embeddings = K.tile(pos_embeddings, [batch_size, 1, 1])
+            return K.concatenate([inputs, pos_embeddings])
+
+    def compute_output_shape(self, input_shape):
+        if self.custom_position_ids:
+            input_shape = input_shape[0]
+
+        if self.merge_mode in ['add', 'mul']:
+            return input_shape
+        else:
+            return input_shape[:2] + (input_shape[2] + self.output_dim,)
+
+    def get_config(self):
+        config = {
+            'output_dim': self.output_dim,
+            'merge_mode': self.merge_mode,
+            'custom_position_ids': self.custom_position_ids,
+        }
+        base_config = super(SinusoidalPositionEmbedding, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 
@@ -982,12 +1074,13 @@ class Loss(Layer):
             return input_shape[self.output_axis]
 
     def compute_mask(self, inputs, mask):
-        if self.output_axis is None:
-            return mask
-        elif isinstance(self.output_axis, list):
-            return [mask[i] for i in self.output_axis]
-        else:
-            return mask[self.output_axis]
+        if mask is not None:
+            if self.output_axis is None:
+                return mask
+            elif isinstance(self.output_axis, list):
+                return [mask[i] for i in self.output_axis]
+            else:
+                return mask[self.output_axis]
 
     def get_config(self):
         config = {
@@ -1000,9 +1093,11 @@ class Loss(Layer):
 custom_objects = {
     'Embedding': Embedding,
     'BiasAdd': BiasAdd,
+    'Concatenate1D': Concatenate1D,
     'MultiHeadAttention': MultiHeadAttention,
     'LayerNormalization': LayerNormalization,
     'PositionEmbedding': PositionEmbedding,
+    'SinusoidalPositionEmbedding': SinusoidalPositionEmbedding,
     'RelativePositionEmbedding': RelativePositionEmbedding,
     'RelativePositionEmbeddingT5': RelativePositionEmbeddingT5,
     'FeedForward': FeedForward,
