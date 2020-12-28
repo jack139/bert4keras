@@ -6,11 +6,6 @@
 # 补充了评测指标bleu、rouge-1、rouge-2、rouge-l
 
 import os
-# 启用AMP, Volta以下显卡，需要设置环境变量 TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE=1
-# 原因来自：https://devtalk.nvidia.com/default/topic/1052688/container-tensorflow/
-#               issue-about-no-suitable-gpus-detected-when-using-mixed-precision-graph-optimizer/
-#os.environ['TF_AUTO_MIXED_PRECISION_GRAPH_REWRITE_IGNORE_PERFORMANCE'] = '1'
-
 # 使用 tf.keras, AMP需要使用 tf.keras的优化器
 os.environ['TF_KERAS'] = '1'
 
@@ -92,6 +87,14 @@ class CrossEntropy(Loss):
         loss = K.sum(loss * y_mask) / K.sum(y_mask)
         return loss
 
+# 在建立model实例前设置AMP，否则会启动不了AMP，报warning:
+# You already have existing Sessions that do not use mixed precision. 
+# enable_mixed_precision_graph_rewrite() will not affect these Sessions.
+#K.clear_session() 
+opt = Adam(2e-4)
+# 启用 AMP, 要使用tf.keras的优化器，不能使用自定义的
+#opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+
 
 t5 = build_transformer_model(
     config_path=config_path,
@@ -110,9 +113,6 @@ model.summary()
 output = CrossEntropy(1)([model.inputs[1], model.outputs[0]])
 
 model = Model(model.inputs, output)
-opt = Adam(2e-4)
-# 启用 AMP, 要使用tf.keras的优化器，不能使用自定义的
-opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 model.compile(optimizer=opt)
 
 

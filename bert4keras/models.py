@@ -50,7 +50,7 @@ class Transformer(object):
         self.sequence_length = sequence_length
         self.keep_tokens = keep_tokens
         self.compound_tokens = compound_tokens
-        self.attention_mask = None
+        self.attention_bias = None
         self.position_bias = None
         self.layers = {} if layers is None else layers
         self.prefix = prefix or ''
@@ -151,10 +151,10 @@ class Transformer(object):
     def apply_final_layers(self, inputs):
         raise NotImplementedError
 
-    def compute_attention_mask(self, inputs=None):
-        """定义每一层的Attention Mask
+    def compute_attention_bias(self, inputs=None):
+        """定义每一层的Attention Bias
         """
-        return self.attention_mask
+        return self.attention_bias
 
     def compute_position_bias(self, inputs=None):
         """定义每一层的Position Bias（一般相对位置编码用）
@@ -306,26 +306,26 @@ class Transformer(object):
 class LM_Mask(object):
     """定义下三角Attention Mask（语言模型用）
     """
-    def compute_attention_mask(self, inputs=None):
+    def compute_attention_bias(self, inputs=None):
         """通过idxs序列的比较来得到对应的mask
         """
-        if self.attention_mask is None:
+        if self.attention_bias is None:
 
             def lm_mask(s):
                 seq_len = K.shape(s)[1]
                 idxs = K.arange(0, seq_len)
                 mask = idxs[None, :] <= idxs[:, None]
                 mask = K.cast(mask, K.floatx())
-                return mask[None, None]
+                return -(1 - mask[None, None]) * 1e12
 
-            self.attention_mask = self.apply(
+            self.attention_bias = self.apply(
                 inputs=self.inputs[0],
                 layer=Lambda,
                 function=lm_mask,
                 name='Attention-LM-Mask'
             )
 
-        return self.attention_mask
+        return self.attention_bias
 
 
 class UniLM_Mask(object):
@@ -333,25 +333,25 @@ class UniLM_Mask(object):
     其中source和target的分区，由segment_ids来表示。
     UniLM: https://arxiv.org/abs/1905.03197
     """
-    def compute_attention_mask(self, inputs=None):
+    def compute_attention_bias(self, inputs=None):
         """通过idxs序列的比较来得到对应的mask
         """
-        if self.attention_mask is None:
+        if self.attention_bias is None:
 
             def unilm_mask(s):
                 idxs = K.cumsum(s, axis=1)
                 mask = idxs[:, None, :] <= idxs[:, :, None]
                 mask = K.cast(mask, K.floatx())
-                return mask[:, None]
+                return -(1 - mask[:, None]) * 1e12
 
-            self.attention_mask = self.apply(
+            self.attention_bias = self.apply(
                 inputs=self.inputs[1],
                 layer=Lambda,
                 function=unilm_mask,
                 name='Attention-UniLM-Mask'
             )
 
-        return self.attention_mask
+        return self.attention_bias
 
 
 class BERT(Transformer):
@@ -364,6 +364,7 @@ class BERT(Transformer):
         with_pool=False,  # 是否包含Pool部分
         with_nsp=False,  # 是否包含NSP部分
         with_mlm=False,  # 是否包含MLM部分
+        hierarchical_position=None,  # 是否层次分解位置编码
         custom_position_ids=False,  # 是否自行传入位置id
         shared_segment_embeddings=False,  # 若True，则segment跟token共用embedding
         **kwargs  # 其余参数
@@ -374,6 +375,7 @@ class BERT(Transformer):
         self.with_pool = with_pool
         self.with_nsp = with_nsp
         self.with_mlm = with_mlm
+        self.hierarchical_position = hierarchical_position
         self.custom_position_ids = custom_position_ids
         self.shared_segment_embeddings = shared_segment_embeddings
         if self.with_nsp and not self.with_pool:
@@ -450,6 +452,7 @@ class BERT(Transformer):
             input_dim=self.max_position,
             output_dim=self.embedding_size,
             merge_mode='add',
+            hierarchical=self.hierarchical_position,
             embeddings_initializer=self.initializer,
             custom_position_ids=self.custom_position_ids,
             name='Embedding-Position'
@@ -489,12 +492,12 @@ class BERT(Transformer):
 
         attention_name = 'Transformer-%d-MultiHeadSelfAttention' % index
         feed_forward_name = 'Transformer-%d-FeedForward' % index
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
 
         # Self Attention
-        xi, x, arguments = x, [x, x, x], {'a_mask': None}
+        xi, x, arguments = x, [x, x, x], {'a_bias': None}
         if attention_mask is not None:
-            arguments['a_mask'] = True
+            arguments['a_bias'] = True
             x.append(attention_mask)
 
         x = self.apply(
@@ -739,12 +742,12 @@ class ALBERT(BERT):
 
         attention_name = 'Transformer-MultiHeadSelfAttention'
         feed_forward_name = 'Transformer-FeedForward'
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
 
         # Self Attention
-        xi, x, arguments = x, [x, x, x], {'a_mask': None}
+        xi, x, arguments = x, [x, x, x], {'a_bias': None}
         if attention_mask is not None:
-            arguments['a_mask'] = True
+            arguments['a_bias'] = True
             x.append(attention_mask)
 
         x = self.apply(
@@ -957,14 +960,14 @@ class NEZHA(BERT):
 
         attention_name = 'Transformer-%d-MultiHeadSelfAttention' % index
         feed_forward_name = 'Transformer-%d-FeedForward' % index
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
         position_bias = self.compute_position_bias(x)
 
         # Self Attention
         xi, x = x, [x, x, x, position_bias]
-        arguments = {'a_mask': None, 'p_bias': 'typical_relative'}
+        arguments = {'a_bias': None, 'p_bias': 'typical_relative'}
         if attention_mask is not None:
-            arguments['a_mask'] = True
+            arguments['a_bias'] = True
             x.insert(3, attention_mask)
 
         x = self.apply(
@@ -1170,6 +1173,7 @@ class GPT(LM_Mask, BERT):
             input_dim=self.max_position,
             output_dim=self.embedding_size,
             merge_mode='add',
+            hierarchical=self.hierarchical_position,
             embeddings_initializer=self.initializer,
             custom_position_ids=self.custom_position_ids,
             name='Embedding-Position'
@@ -1267,6 +1271,7 @@ class GPT2(GPT):
             input_dim=self.max_position,
             output_dim=self.embedding_size,
             merge_mode='add',
+            hierarchical=self.hierarchical_position,
             embeddings_initializer=self.initializer,
             name='Embedding-Position'
         )
@@ -1290,7 +1295,7 @@ class GPT2(GPT):
 
         attention_name = 'Transformer-%d-MultiHeadSelfAttention' % index
         feed_forward_name = 'Transformer-%d-FeedForward' % index
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
 
         # Self Attention
         xi = x
@@ -1307,7 +1312,7 @@ class GPT2(GPT):
         x = self.apply(
             inputs=[x, x, x, attention_mask],
             layer=MultiHeadAttention,
-            arguments={'a_mask': True},
+            arguments={'a_bias': True},
             heads=self.num_attention_heads,
             head_size=self.attention_head_size,
             out_dim=self.hidden_size,
@@ -1433,6 +1438,7 @@ class GPT2_ML(GPT):
             input_dim=self.max_position,
             output_dim=self.embedding_size,
             merge_mode='add',
+            hierarchical=self.hierarchical_position,
             embeddings_initializer=self.initializer,
             name='Embedding-Position'
         )
@@ -1466,10 +1472,10 @@ class GPT2_ML(GPT):
 
         attention_name = 'Transformer-%d-MultiHeadSelfAttention' % index
         feed_forward_name = 'Transformer-%d-FeedForward' % index
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
 
         # Self Attention
-        xi, x, arguments = x, [x, x, x, attention_mask], {'a_mask': True}
+        xi, x, arguments = x, [x, x, x, attention_mask], {'a_bias': True}
 
         x = self.apply(
             inputs=x,
@@ -1762,7 +1768,7 @@ class T5_Encoder(T5_Base):
 
         attention_name = 'Encoder-Transformer-%d-MultiHeadSelfAttention' % index
         feed_forward_name = 'Encoder-Transformer-%d-FeedForward' % index
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
         position_bias = self.compute_position_bias(x)
 
         # Self Attention
@@ -1945,7 +1951,7 @@ class T5_Decoder(LM_Mask, T5_Base):
         self_attention_name = 'Decoder-Transformer-%d-MultiHeadSelfAttention' % index
         cross_attention_name = 'Decoder-Transformer-%d-MultiHeadCrossAttention' % index
         feed_forward_name = 'Decoder-Transformer-%d-FeedForward' % index
-        attention_mask = self.compute_attention_mask(index)
+        attention_mask = self.compute_attention_bias(index)
         position_bias = self.compute_position_bias([x, c])
 
         # Self Attention
@@ -1965,7 +1971,7 @@ class T5_Decoder(LM_Mask, T5_Base):
             inputs=[x, x, x, attention_mask, position_bias[0]],
             layer=MultiHeadAttention,
             arguments={
-                'a_mask': True,
+                'a_bias': True,
                 'p_bias': 't5_relative'
             },
             heads=self.num_attention_heads,
@@ -2004,7 +2010,7 @@ class T5_Decoder(LM_Mask, T5_Base):
             inputs=[x, c, c, position_bias[1]],
             layer=MultiHeadAttention,
             arguments={
-                'a_mask': None,
+                'a_bias': None,
                 'p_bias': 't5_relative'
             },
             heads=self.num_attention_heads,
@@ -2128,12 +2134,12 @@ class T5_Decoder(LM_Mask, T5_Base):
 
         return x
 
-    def compute_attention_mask(self, inputs=None):
+    def compute_attention_bias(self, inputs=None):
         """修改LM Mask的序列长度（从 self.inputs[0] 改为 self.inputs[1] ）
         """
         old_inputs = self.inputs[:]
         self.inputs = [old_inputs[1]]
-        mask = super(T5_Decoder, self).compute_attention_mask(inputs)
+        mask = super(T5_Decoder, self).compute_attention_bias(inputs)
         self.inputs = old_inputs
         return mask
 
