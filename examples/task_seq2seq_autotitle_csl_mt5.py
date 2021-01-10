@@ -1,6 +1,6 @@
 #! -*- coding: utf-8 -*-
 # 微调多国语言版T5做Seq2Seq任务
-# 介绍链接：kexue.fm/archives/7867
+# 介绍链接：https://kexue.fm/archives/7867
 # 细节请看：https://github.com/bojone/t5_in_bert4keras
 # 数据集：https://github.com/CLUEbenchmark/CLGE 中的CSL数据集
 # 补充了评测指标bleu、rouge-1、rouge-2、rouge-l
@@ -122,7 +122,7 @@ class AutoTitle(AutoRegressiveDecoder):
     @AutoRegressiveDecoder.wraps(default_rtype='probas')
     def predict(self, inputs, output_ids, states):
         c_encoded = inputs[0]
-        return decoder.predict([c_encoded, output_ids])[:, -1]
+        return self.last_token(decoder).predict([c_encoded, output_ids])
 
     def generate(self, text, topk=1):
         c_token_ids, _ = tokenizer.encode(text, maxlen=max_c_len)
