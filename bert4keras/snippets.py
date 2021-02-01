@@ -8,7 +8,8 @@ import re
 import sys
 from collections import defaultdict
 import json
-import keras
+import tensorflow as tf
+from bert4keras.backend import K, keras
 
 _open_ = open
 is_py2 = six.PY2
@@ -16,7 +17,7 @@ is_py2 = six.PY2
 if not is_py2:
     basestring = str
 
-    
+
 def to_array(*args):
     """批量转numpy的array
     """
@@ -156,7 +157,7 @@ def parallel_apply(
 
     in_queue, out_queue, seed_queue = Queue(max_queue_size), Queue(), Queue()
     if random_seeds is True:
-        random_seeds = np.random.randint(0, 2**32, workers)
+        random_seeds = [None] * workers
     elif random_seeds is None or random_seeds is False:
         random_seeds = []
     for seed in random_seeds:
@@ -329,6 +330,36 @@ class DataGenerator(object):
         while True:
             for d in self.__iter__(random):
                 yield d
+
+    def to_dataset(self, types, shapes, names=None):
+        """转为tf.data.Dataset格式
+        如果传入names的话，自动把数据包装成dict形式。
+        """
+        if names is None:
+            generator = self.forfit
+        else:
+            if is_string(names):
+                warps = lambda k, v: {k: v}
+            elif is_string(names[0]):
+                warps = lambda k, v: dict(zip(k, v))
+            else:
+                warps = lambda k, v: tuple(
+                    dict(zip(i, j)) for i, j in zip(k, v)
+                )
+
+            def generator():
+                for d in self.forfit():
+                    yield warps(names, d)
+
+            types = warps(names, types)
+            shapes = warps(names, shapes)
+
+        dataset = tf.data.Dataset.from_generator(
+            generator, output_types=types, output_shapes=shapes
+        )
+        dataset = dataset.batch(self.batch_size)
+
+        return dataset
 
 
 class ViterbiDecoder(object):
@@ -660,8 +691,6 @@ class WebServing(object):
     """
     def __init__(self, host='0.0.0.0', port=8000, server='paste'):
 
-        import tensorflow as tf
-        from bert4keras.backend import K
         import bottle
 
         self.host = host

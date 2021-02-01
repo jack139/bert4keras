@@ -1,6 +1,6 @@
 #! -*- coding: utf-8 -*-
 # 微调多国语言版T5做Seq2Seq任务
-# 介绍链接：kexue.fm/archives/7867
+# 介绍链接：https://kexue.fm/archives/7867
 # 细节请看：https://github.com/bojone/t5_in_bert4keras
 # 数据集：https://github.com/CLUEbenchmark/CLGE 中的CSL数据集
 # 补充了评测指标bleu、rouge-1、rouge-2、rouge-l
@@ -81,7 +81,7 @@ class CrossEntropy(Loss):
     def compute_loss(self, inputs, mask=None):
         y_true, y_pred = inputs
         y_true = y_true[:, 1:]  # 目标token_ids
-        y_mask = K.cast(mask[1], K.floatx())[:, :-1]  # 解码器自带mask
+        y_mask = K.cast(mask[1], K.floatx())[:, 1:]  # 解码器自带mask
         y_pred = y_pred[:, :-1]  # 预测序列，错开一位
         loss = K.sparse_categorical_crossentropy(y_true, y_pred)
         loss = K.sum(loss * y_mask) / K.sum(y_mask)
@@ -132,7 +132,9 @@ class AutoTitle(AutoRegressiveDecoder):
 
 
 # 注：T5有一个很让人不解的设置，它的<bos>标记id是0，即<bos>和<pad>其实都是0
-autotitle = AutoTitle(start_id=0, end_id=tokenizer._token_end_id, maxlen=32)
+autotitle = AutoTitle(
+    start_id=0, end_id=tokenizer._token_end_id, maxlen=max_t_len
+)
 
 
 class Evaluator(keras.callbacks.Callback):
